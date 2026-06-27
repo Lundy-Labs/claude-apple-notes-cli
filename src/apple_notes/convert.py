@@ -16,7 +16,7 @@ from __future__ import annotations
 import re
 
 import markdown as _markdown
-from bs4 import BeautifulSoup, NavigableString, Tag
+from bs4 import BeautifulSoup, Tag
 from markdownify import MarkdownConverter
 
 # ---------------------------------------------------------------------------

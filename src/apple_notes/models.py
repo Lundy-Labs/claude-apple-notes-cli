@@ -3,7 +3,7 @@ names without updating every consumer (notes, cli, mcp_server, memory, export)."
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime
 
 
