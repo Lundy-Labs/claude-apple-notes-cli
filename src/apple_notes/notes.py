@@ -11,6 +11,10 @@ Flow:
 
 from __future__ import annotations
 
+from datetime import datetime
+
+from . import convert
+from .backend import run_json
 from .models import Folder, Note
 
 # Folders the tool is allowed to touch by default (safety: don't roam the whole
@@ -19,38 +23,117 @@ DEFAULT_FOLDER = "Claude Memory"
 EXPORT_FOLDER = "Claude Exports"
 
 
+# --------------------------------------------------------------------------- #
+# parsing helpers
+# --------------------------------------------------------------------------- #
+def _parse_dt(value: str | None) -> datetime | None:
+    """Parse an ISO-8601 string (as emitted by JXA ``Date.toISOString()``) into a
+    naive/aware ``datetime``. Returns None for missing/unparseable values."""
+    if not value:
+        return None
+    text = str(value)
+    # JXA emits e.g. "2026-06-27T17:04:05.123Z"; Python's fromisoformat handles
+    # the offset form but historically not a trailing "Z", so normalize it.
+    if text.endswith("Z"):
+        text = text[:-1] + "+00:00"
+    try:
+        return datetime.fromisoformat(text)
+    except ValueError:
+        return None
+
+
+def _note_from_record(rec: dict, *, body_markdown: str | None = None) -> Note:
+    """Build a :class:`Note` from a backend JSON record. ``name`` is the note
+    title in Notes; ``body_markdown`` is supplied only for full reads."""
+    return Note(
+        id=rec["id"],
+        title=rec.get("name") or "",
+        folder=rec.get("folder"),
+        body_markdown=body_markdown,
+        created=_parse_dt(rec.get("created")),
+        modified=_parse_dt(rec.get("modified")),
+    )
+
+
+def _split_title_body(body_markdown: str) -> tuple[str | None, str]:
+    """Split a Markdown blob into (title, remainder).
+
+    Used when the caller hands us a full note body and we want the first line as
+    the note title. Strips a leading Markdown heading marker (``# ``) from the
+    title line so the note name is clean.
+    """
+    body_markdown = body_markdown or ""
+    parts = body_markdown.split("\n", 1)
+    first = parts[0].strip()
+    rest = parts[1] if len(parts) > 1 else ""
+    title = first.lstrip("#").strip() if first else None
+    return (title or None), rest
+
+
+# --------------------------------------------------------------------------- #
+# read path
+# --------------------------------------------------------------------------- #
 def list_folders() -> list[Folder]:
     """Return all Notes folders across accounts."""
-    raise NotImplementedError  # Agent B
+    records = run_json("list_folders")
+    return [
+        Folder(
+            id=rec["id"],
+            name=rec.get("name") or "",
+            account=rec.get("account") or "iCloud",
+        )
+        for rec in records
+    ]
 
 
 def list_notes(folder: str | None = None) -> list[Note]:
     """List notes (title + id only; ``body_markdown`` is None). If ``folder`` is
     None, lists DEFAULT_FOLDER; pass a folder name to scope elsewhere."""
-    raise NotImplementedError  # Agent B
+    target = folder if folder is not None else DEFAULT_FOLDER
+    records = run_json("list_notes", [target])
+    return [_note_from_record(rec) for rec in records]
 
 
 def search_notes(query: str, folder: str | None = None) -> list[Note]:
     """Search note titles and bodies for ``query`` (case-insensitive)."""
-    raise NotImplementedError  # Agent B
+    args = [query, folder if folder is not None else ""]
+    records = run_json("search_notes", args)
+    return [_note_from_record(rec) for rec in records]
 
 
 def read_note(note_id: str) -> Note:
     """Fetch a single note with its body converted to Markdown."""
-    raise NotImplementedError  # Agent B
+    rec = run_json("read_note", [note_id])
+    html = rec.get("body") or ""
+    body_markdown = convert.html_to_markdown(html)
+    return _note_from_record(rec, body_markdown=body_markdown)
 
 
+# --------------------------------------------------------------------------- #
+# write path
+# --------------------------------------------------------------------------- #
 def create_note(title: str, body_markdown: str, folder: str = DEFAULT_FOLDER) -> Note:
     """Create a note. ``title`` becomes the first line (Notes derives the note
     name from line 1). Creates ``folder`` if it does not exist."""
-    raise NotImplementedError  # Agent B
+    # markdown_to_html renders `title` as the first line so Notes uses it as the
+    # note name; the body follows it.
+    html = convert.markdown_to_html(body_markdown or "", title=title)
+    rec = run_json("create_note", [folder, html])
+    # Return a fully-populated Note, including the Markdown we just wrote.
+    body = body_markdown or ""
+    return _note_from_record(rec, body_markdown=body)
 
 
 def append_note(note_id: str, body_markdown: str) -> Note:
     """Append Markdown to an existing note's body."""
-    raise NotImplementedError  # Agent B
+    # No title for an append fragment — it must not become a new first line.
+    fragment_html = convert.markdown_to_html(body_markdown or "")
+    run_json("append_note", [note_id, fragment_html])
+    # Re-read so the returned Note reflects the full, current body as Markdown.
+    return read_note(note_id)
 
 
 def delete_note(note_id: str) -> None:
     """Delete a note by id."""
-    raise NotImplementedError  # Agent B
+    run_json("delete_note", [note_id])
+    return None

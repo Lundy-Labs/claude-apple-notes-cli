@@ -10,8 +10,11 @@ module just formats a header (title, date) and files it in EXPORT_FOLDER.
 
 from __future__ import annotations
 
+from datetime import date
+
+from . import notes
 from .models import Note
-from .notes import EXPORT_FOLDER  # noqa: F401
+from .notes import EXPORT_FOLDER
 
 
 def export_note(
@@ -24,5 +27,15 @@ def export_note(
 
     ``kind`` ("chat" | "research") selects a small header template (title + date
     + kind). Returns the created Note.
+
+    The tool cannot read Claude's own transcript: Claude assembles the
+    conversation/research as Markdown and passes it in as ``body_markdown``;
+    this function only prepends a small header and files it.
     """
-    raise NotImplementedError  # Agent D
+    header = (
+        f"_{kind.capitalize()} exported by Claude · {date.today().isoformat()}_\n\n"
+        f"---\n\n"
+    )
+    body = header + body_markdown
+    # ``title`` becomes the note's name (Notes derives it from the first line).
+    return notes.create_note(title, body, folder=folder)
