@@ -67,9 +67,19 @@ delete_note(note_id) -> None
 
 ## Memory model
 
-A `Claude Memory` folder with notes: `Profile`, `Preferences`, `Projects`,
-`Log` (append-only). `memory_get/set` read/write these. Future (local only): a
-Claude Code **SessionStart hook** to auto-load memory at session start.
+A `Claude Memory` folder with notes: `Core` (curated summary), `Profile`,
+`Preferences`, `Projects`, `Log` (append-only). Two tiers keep per-session cost
+flat:
+
+- **Tier 1 (push):** `memory_core()` returns the small `Core` note + a pointer
+  list of other notes' titles. A Claude Code **SessionStart hook**
+  (`notes memory core`, matcher `startup|resume`) injects this into context
+  automatically; it's hook-safe (exits 0 on backend errors).
+- **Tier 2 (pull):** bulk notes fetched on demand via `memory_get` /
+  `notes_search`, only when relevant.
+
+Same split serves remote/iPhone, where there's no hook — Claude pulls via the
+`memory_core` / `memory_get` MCP tools.
 
 ## Build phases
 

@@ -152,6 +152,14 @@ def memory_set(key: str, body_markdown: str, append: bool = False) -> str:
     return f"memory '{key}' {'appended' if append else 'set'}."
 
 
+@mcp.tool(name="memory_core")
+def memory_core() -> str:
+    """Return the lightweight memory 'core': a curated summary plus a pointer
+    list of the other memory notes. Cheap orientation — pull individual notes
+    with memory_get only when a topic is actually relevant."""
+    return memory_mod.memory_core()
+
+
 @mcp.tool(name="export_note")
 def export_note(
     title: str, body_markdown: str, kind: str = "chat"

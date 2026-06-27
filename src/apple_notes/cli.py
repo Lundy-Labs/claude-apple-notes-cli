@@ -21,6 +21,7 @@ from typing import Optional
 
 import typer
 
+from . import memory as mem
 from . import notes as core
 from .backend import BackendError
 
@@ -153,6 +154,66 @@ def delete(
         typer.confirm(f"Delete note {note_id}?", abort=True)
     _run(lambda: core.delete_note(note_id), "deleting note")
     typer.echo(f"deleted: {note_id}")
+
+
+# --- memory subcommands ----------------------------------------------------
+
+memory_app = typer.Typer(
+    help="Read/write Claude memory notes (in the 'Claude Memory' folder).",
+    no_args_is_help=True,
+)
+app.add_typer(memory_app, name="memory")
+
+
+@memory_app.command("core")
+def memory_core() -> None:
+    """Print the lightweight memory core (curated 'Core' note + pointers).
+
+    Designed for a Claude Code SessionStart hook: small, flat-cost, and
+    hook-safe — it never exits non-zero on a backend hiccup, so a transient
+    Notes error can't block a session from starting.
+    """
+    try:
+        block = mem.memory_core()
+    except NotImplementedError:
+        _fail("memory core is not available yet (runs only on macOS).")
+    except BackendError as exc:
+        typer.secho(
+            f"warning: memory core unavailable: {exc}",
+            fg=typer.colors.YELLOW,
+            err=True,
+        )
+        raise typer.Exit(code=0)
+    if block:
+        typer.echo(block, nl=False)
+
+
+@memory_app.command("get")
+def memory_get(
+    key: str = typer.Argument(..., help="Memory note name, e.g. Profile."),
+) -> None:
+    """Print a memory note's Markdown body (empty if it doesn't exist yet)."""
+    body = _run(lambda: mem.memory_get(key), "reading memory")
+    typer.echo(body)
+
+
+@memory_app.command("set")
+def memory_set(
+    key: str = typer.Argument(..., help="Memory note name, e.g. Profile."),
+    body: Optional[str] = typer.Option(
+        None, "--body", "-b", help="Markdown content (omit to read from stdin)."
+    ),
+    append: bool = typer.Option(
+        False, "--append", "-a", help="Append instead of replacing the note."
+    ),
+) -> None:
+    """Create/replace (or --append) a memory note from --body or stdin."""
+    body_markdown = _body_from_option_or_stdin(body)
+    _run(
+        lambda: mem.memory_set(key, body_markdown, append=append),
+        "writing memory",
+    )
+    typer.echo(f"memory '{key}' {'appended' if append else 'set'}.")
 
 
 if __name__ == "__main__":

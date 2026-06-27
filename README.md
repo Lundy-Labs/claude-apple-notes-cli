@@ -89,7 +89,8 @@ output), never by title — titles are not unique.
 
 The MCP server exposes the core operations plus memory/export as tools:
 `notes_list_folders`, `notes_list`, `notes_search`, `notes_read`,
-`notes_create`, `notes_append`, `memory_get`, `memory_set`, `export_note`.
+`notes_create`, `notes_append`, `memory_core`, `memory_get`, `memory_set`,
+`export_note`.
 
 ### Local (stdio) — Claude Code on the Mac
 
@@ -155,19 +156,73 @@ reads to learn about you instead of scanning your whole library:
 
 | Note          | Purpose                                            |
 |---------------|----------------------------------------------------|
+| `Core`        | tiny, curated summary auto-loaded every session    |
 | `Profile`     | who you are, role, context                         |
 | `Preferences` | how you like Claude to work                        |
 | `Projects`    | what you're building                               |
 | `Log`         | append-only running notes Claude adds over time    |
 
-- `memory_get(key)` returns that note's Markdown body, or `''` if it doesn't
-  exist yet.
-- `memory_set(key, body_markdown, append=False)` creates or **replaces** the
-  note; with `append=True` it **appends** instead (and creates the note if it's
-  missing — ideal for `Log`).
+### Two tiers — keep the per-session cost flat
 
-> Future (local only): a Claude Code **SessionStart hook** can auto-load memory
-> at the start of each session.
+Loading *all* of memory into every session is wasteful and gets worse as memory
+grows. Instead, memory is split into two tiers:
+
+- **Tier 1 — always loaded (cheap).** The `Core` note is a small, hand-curated
+  block (a few hundred tokens): who you are, top preferences. `notes memory core`
+  prints `Core` **plus a pointer list** of the other memory notes (titles only,
+  not their contents). This is what the SessionStart hook loads — its size is
+  flat no matter how big the memory folder gets.
+- **Tier 2 — pulled on demand.** Everything substantial (`Projects`, `Log`,
+  research) stays in Notes and Claude fetches it with `memory_get` /
+  `notes_search` **only when the conversation actually needs it.**
+
+So the hook *pushes* a cheap index; the MCP tools *pull* the bulk lazily.
+
+```bash
+notes memory core                         # the Tier-1 block (for the hook)
+notes memory get Projects                 # pull one note on demand
+echo "## Profile\n..." | notes memory set Profile
+notes memory set Log --append --body "Shipped v0.1 today"
+```
+
+API: `memory_core()` builds the Tier-1 block; `memory_get(key)` returns a note's
+Markdown (or `''` if absent); `memory_set(key, body_markdown, append=False)`
+creates/**replaces** a note, or **appends** with `append=True` (ideal for `Log`).
+
+### SessionStart hook (local Claude Code)
+
+Make Claude load Tier-1 memory automatically at the start of every local
+session. A **SessionStart hook** runs a command when a session begins and
+**injects its stdout into the session context** — so printing `notes memory core`
+means Claude starts already oriented, with no prompting.
+
+Add to `~/.claude/settings.json` (use the absolute path to the binary if `notes`
+isn't on Claude Code's `PATH`):
+
+```json
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup|resume",
+        "hooks": [
+          { "type": "command", "command": "notes memory core" }
+        ]
+      }
+    ]
+  }
+}
+```
+
+Notes:
+
+- `matcher: "startup|resume"` scopes it to new/resumed sessions and skips firing
+  on every `/clear`, trimming repeated cost.
+- `notes memory core` is **hook-safe**: on a transient Notes/backend error it
+  warns on stderr and exits `0`, so it never blocks a session from starting; if
+  memory is empty it prints nothing.
+- This is **local-only**. On the iPhone/web app there's no hook — Claude instead
+  *pulls* with the `memory_core` / `memory_get` MCP tools when relevant.
 
 ## Export model
 

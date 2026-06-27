@@ -16,7 +16,12 @@ from . import notes
 from .models import Note
 from .notes import DEFAULT_FOLDER
 
-MEMORY_KEYS = ("Profile", "Preferences", "Projects", "Log")
+MEMORY_KEYS = ("Core", "Profile", "Preferences", "Projects", "Log")
+
+# Tier-1 note: a tiny, hand-curated block that is cheap enough to load into
+# every session (via the SessionStart hook). Everything else stays in Notes and
+# is pulled on demand with memory_get / notes_search.
+CORE_KEY = "Core"
 
 
 def _find_note(key: str) -> Note | None:
@@ -46,6 +51,42 @@ def memory_get(key: str) -> str:
     # list/search return title+id only; fetch the full body.
     full = notes.read_note(note.id)
     return full.body_markdown or ""
+
+
+def memory_core() -> str:
+    """Build the lightweight Tier-1 memory block for the SessionStart hook.
+
+    Returns the curated ``Core`` note (if any) plus a *pointer list* of the other
+    memory notes present — titles only, not their contents. This is deliberately
+    small: bulk content (Projects, Log, ...) is fetched on demand via
+    :func:`memory_get` / ``notes_search``, so the per-session cost stays flat no
+    matter how large the memory folder grows. Returns '' if memory is empty.
+    """
+    parts: list[str] = []
+
+    core_note = _find_note(CORE_KEY)
+    if core_note is not None:
+        body = (notes.read_note(core_note.id).body_markdown or "").strip()
+        if body:
+            parts.append(body)
+
+    # Pointers: titles of the other memory notes Claude can pull when relevant.
+    available = sorted(
+        n.title
+        for n in notes.list_notes(folder=DEFAULT_FOLDER)
+        if n.title != CORE_KEY
+    )
+    if available:
+        pointers = "\n".join(f"  - {title}" for title in available)
+        parts.append(
+            "More is stored in Claude Memory — fetch on demand with the "
+            "`memory_get` tool (or `notes memory get <name>`) only when relevant:\n"
+            f"{pointers}"
+        )
+
+    if not parts:
+        return ""
+    return "## What Claude remembers about you\n\n" + "\n\n".join(parts) + "\n"
 
 
 def memory_set(key: str, body_markdown: str, append: bool = False) -> None:
