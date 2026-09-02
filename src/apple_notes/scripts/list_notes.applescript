@@ -1,40 +1,39 @@
 // JXA (osascript -l JavaScript). Run via apple_notes.backend.run_json.
-// Args: [folderName]
+// Args: [folderName, limit?]
+//   folderName - exact folder name (whose({name})), searched across accounts.
+//   limit      - optional max notes (0 / omitted = no cap).
 // Output: JSON array of {id, name, folder, account, created, modified}.
-//         Bodies are intentionally NOT included (list view is title+id only).
+//         Bodies are intentionally NOT included. Dates are omitted so a large
+//         default Notes folder does not hang on per-note Apple Events.
 //
-// Lists notes within the first folder whose name matches folderName
-// (case-sensitive exact match), searched across all accounts.
+// Uses bulk specifier .id()/.name() (two Apple Events per folder), not a
+// per-note loop that calls name()/id()/dates on every note.
 function run(argv) {
   const folderName = argv[0];
+  const limit = argv.length > 1 ? parseInt(argv[1], 10) || 0 : 0;
   const Notes = Application("Notes");
-  const out = [];
 
-  const accounts = Notes.accounts();
-  for (let a = 0; a < accounts.length; a++) {
-    const account = accounts[a];
-    const accountName = account.name();
-    const folders = account.folders();
-    for (let f = 0; f < folders.length; f++) {
-      const folder = folders[f];
-      if (folder.name() !== folderName) continue;
-      const notes = folder.notes();
-      for (let n = 0; n < notes.length; n++) {
-        const note = notes[n];
-        out.push({
-          id: note.id(),
-          name: note.name(),
-          folder: folderName,
-          account: accountName,
-          created: isoOrNull(note.creationDate()),
-          modified: isoOrNull(note.modificationDate()),
-        });
-      }
+  const folders = findFoldersByName(Notes, folderName);
+  if (!folders.length) throw new Error("folder not found: " + folderName);
+
+  const out = [];
+  for (let i = 0; i < folders.length; i++) {
+    if (limit > 0 && out.length >= limit) break;
+    const folder = folders[i];
+    let accountName = null;
+    try {
+      accountName = folder.container().name();
+    } catch (e) {
+      accountName = null;
     }
+    const remaining = limit > 0 ? limit - out.length : 0;
+    const chunk = recordsFromSpecifier(
+      folder.notes,
+      folder.name(),
+      accountName,
+      remaining
+    );
+    for (let j = 0; j < chunk.length; j++) out.push(chunk[j]);
   }
   return JSON.stringify(out);
-}
-
-function isoOrNull(d) {
-  return d ? d.toISOString() : null;
 }

@@ -46,16 +46,28 @@ class BackendError(RuntimeError):
     """osascript failed or Notes returned an error."""
 
 
+_LIB_SCRIPT = "_lib"
+
+
 def load_script(name: str) -> str:
     """Load a script template from ``scripts/<name>.applescript``.
 
     ``name`` is given without the extension, e.g. ``load_script("list_folders")``.
+    Operation scripts are prepended with ``_lib.applescript`` (shared whose/byId
+    helpers) so lookup code is not copy-pasted into every file.
     """
     path = SCRIPTS_DIR / f"{name}.applescript"
     try:
-        return path.read_text(encoding="utf-8")
+        source = path.read_text(encoding="utf-8")
     except FileNotFoundError as exc:  # pragma: no cover - trivial
         raise BackendError(f"script template not found: {path}") from exc
+    if name == _LIB_SCRIPT:
+        return source
+    lib_path = SCRIPTS_DIR / f"{_LIB_SCRIPT}.applescript"
+    if lib_path.exists():
+        lib = lib_path.read_text(encoding="utf-8")
+        return lib + "\n" + source
+    return source
 
 
 def run_applescript(script: str, args: list[str] | None = None) -> str:

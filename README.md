@@ -17,9 +17,9 @@ about you across sessions, and to **export** chats or research into notes.
   - a **Typer CLI** (`notes`) for the terminal, and
   - an **MCP server** (`apple-notes-mcp`) that exposes the same operations as
     tools to Claude.
-- **Markdown is the wire format.** Apple Notes stores HTML internally;
-  conversion happens at the boundary (`convert.py`). Bodies are always exchanged
-  as Markdown at the API/CLI/MCP layer.
+- **Markdown is the default wire format.** Apple Notes stores HTML internally;
+  conversion happens at the boundary (`convert.py`). Use `notes read --html` to
+  inspect raw HTML. Title lookup is `notes find --title` (JXA `whose({name})`).
 - Pinned by default to two folders so it won't roam your whole library:
   **`Claude Memory`** and **`Claude Exports`**. An explicit `--folder` overrides.
 
@@ -71,26 +71,78 @@ notes --help
 # Browse
 notes folders                      # list all Notes folders
 notes list                         # list notes in "Claude Memory" (default)
-notes list --folder "Notes"        # scope to another folder
-notes search "tailscale"           # search titles + bodies
+notes list --folder "Notes" --limit 50
+notes find --title "02 September"  # exact title via whose({name}); no body scan
+notes search "tailscale" --title-only
+notes search "tailscale" --folder "Claude Memory"
 notes read NOTE_ID                 # print a note's Markdown body
+notes read NOTE_ID --html          # raw Notes HTML (read-only; does not rewrite)
 
 # Write (body via --body or piped on stdin)
+# WARNING: append assigns note.body and strips Forever Notes note-to-note links.
+# Never append to Planner "DD Month" dailies; test writes on a throwaway note.
 notes write --title "Idea" --body "## Idea\n\nText here"
 echo "## Idea" | notes write --title "Idea"
 notes append NOTE_ID --body "More text"
 notes delete NOTE_ID
 ```
 
-Notes are addressed by their stable AppleScript **id** (shown in `list`/`search`
-output), never by title — titles are not unique.
+`notes find --title` is the fast path for Forever Notes daily pages. Notes are
+also addressed by their stable AppleScript **id** (shown in `list`/`search`/
+`find` output).
+
+## Large libraries
+
+Title and id lookups use JXA `whose()` / `byId`. They do **not** walk every
+folder calling `plaintext()` on every note.
+
+- `notes find --title "02 September"` — exact `whose({name})`.
+- `notes search QUERY --title-only` — title `whose({name: {_contains}})` only.
+- Body search is folder-scoped: pass `--folder`, or it scans only
+  `Claude Memory` and `Claude Exports`. It never `plaintext()`s the whole
+  library.
+- `notes list` bulk-reads `.id()` / `.name()` on the folder specifier. Use
+  `--limit` on huge folders such as **Notes**.
+
+## Forever Notes (Planner dailies)
+
+Daily pages in **Planner** titled `DD Month` (e.g. `02 September`) store
+clickable Home/Today/Back/Next **note links**. AppleScript `note.body()` does
+not export those links (href count is 0 on an untouched page). **Any assignment
+to `note.body`** — append-by-rewrite, markdown round-trip, or set-body —
+strips them.
+
+Notes.app's scripting dictionary exposes these note properties:
+
+`container, class, password protected, modification date, creation date, shared, body, id, name, plaintext`
+
+There is **no** append, insert, attributed-text, or document-model command.
+The only scriptable content mutation is setting `body`, which re-serializes
+the note. This CLI therefore **does not ship a fake "safe append"** for
+Planner dailies: `notes append` still assigns `body` (for simple notes such as
+Claude Memory) and **refuses** Planner `DD Month` titles.
+
+Do **not** test body writes on Planner dailies. Create a throwaway note
+instead.
+
+A morning digest can still **find** today's page quickly:
+
+```bash
+notes find --title "02 September"
+```
+
+Filling Weather/Meetings on that page is **not possible** through AppleScript
+without destroying the nav links. GUI paste or a Shortcuts "Append to Note"
+action might insert without going through `note.body`; those are not part of
+Notes' scripting interface and are not shipped here (unverified on this
+tooling, and Shortcuts needs a GUI session plus a user-installed shortcut).
 
 ## MCP registration
 
 The MCP server exposes the core operations plus memory/export as tools:
-`notes_list_folders`, `notes_list`, `notes_search`, `notes_read`,
+`notes_list_folders`, `notes_list`, `notes_find`, `notes_search`, `notes_read`,
 `notes_create`, `notes_append`, `memory_core`, `memory_get`, `memory_set`,
-`export_note`.
+`export_note`. `notes_append` assigns `note.body` and refuses Planner dailies.
 
 ### Local (stdio) — Claude Code on the Mac
 

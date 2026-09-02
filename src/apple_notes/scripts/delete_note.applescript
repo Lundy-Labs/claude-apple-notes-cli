@@ -12,17 +12,3 @@ function run(argv) {
   Notes.delete(note);
   return JSON.stringify("ok");
 }
-
-function findNoteById(Notes, noteId) {
-  const accounts = Notes.accounts();
-  for (let a = 0; a < accounts.length; a++) {
-    const folders = accounts[a].folders();
-    for (let f = 0; f < folders.length; f++) {
-      const notes = folders[f].notes();
-      for (let n = 0; n < notes.length; n++) {
-        if (notes[n].id() === noteId) return notes[n];
-      }
-    }
-  }
-  return null;
-}

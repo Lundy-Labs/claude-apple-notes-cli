@@ -1,9 +1,14 @@
 // JXA (osascript -l JavaScript). Run via apple_notes.backend.run_json.
 // Args: [noteId, htmlFragment]
 //   noteId       - stable AppleScript id of the note to append to.
-//   htmlFragment - HTML to append to the END of the existing body. The title
-//                  (first line) is left untouched.
+//   htmlFragment - HTML fragment concatenated onto the existing body.
 // Output: JSON object {id, name, folder, account, created, modified}.
+//
+// THIS ASSIGNS note.body. Notes.sdef has no append/insert/attributedText
+// command — the only scriptable content mutation is setting `body`, which
+// re-serializes the note and strips Forever Notes Home/Today/Back/Next links
+// (those links are not present in body() HTML; href count is 0). Do not use
+// this on Planner "DD Month" dailies; the script refuses those titles.
 function run(argv) {
   const noteId = argv[0];
   const htmlFragment = argv[1];
@@ -14,51 +19,11 @@ function run(argv) {
     throw new Error("note not found: " + noteId);
   }
 
-  // Concatenating HTML keeps the existing title (first line) intact and adds
-  // the new content after it.
+  const rec = noteToRecord(note);
+  refuseForeverNotesDailyWrite(rec.name, rec.folder);
+
   const current = note.body() || "";
   note.body = current + htmlFragment;
 
-  let folderName = null;
-  let accountName = null;
-  try {
-    const container = note.container();
-    if (container) {
-      folderName = container.name();
-      try {
-        accountName = container.container().name();
-      } catch (e) {
-        accountName = null;
-      }
-    }
-  } catch (e) {
-    folderName = null;
-  }
-
-  return JSON.stringify({
-    id: note.id(),
-    name: note.name(),
-    folder: folderName,
-    account: accountName,
-    created: isoOrNull(note.creationDate()),
-    modified: isoOrNull(note.modificationDate()),
-  });
-}
-
-function findNoteById(Notes, noteId) {
-  const accounts = Notes.accounts();
-  for (let a = 0; a < accounts.length; a++) {
-    const folders = accounts[a].folders();
-    for (let f = 0; f < folders.length; f++) {
-      const notes = folders[f].notes();
-      for (let n = 0; n < notes.length; n++) {
-        if (notes[n].id() === noteId) return notes[n];
-      }
-    }
-  }
-  return null;
-}
-
-function isoOrNull(d) {
-  return d ? d.toISOString() : null;
+  return JSON.stringify(noteToRecord(note));
 }

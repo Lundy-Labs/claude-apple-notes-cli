@@ -28,15 +28,10 @@ def _find_note(key: str) -> Note | None:
     """Locate the memory note titled ``key`` in DEFAULT_FOLDER, or None.
 
     Titles in Apple Notes are not unique, so we match exactly (case-sensitively)
-    on the first note whose title equals ``key``. We prefer ``list_notes`` (a
-    cheap title+id listing) and fall back to ``search_notes``.
+    on the first note whose title equals ``key``. Prefers ``find_notes_by_title``
+    (JXA whose({name})) over listing or body search.
     """
-    candidates = notes.list_notes(folder=DEFAULT_FOLDER)
-    for note in candidates:
-        if note.title == key:
-            return note
-    # Fall back to a search in case listing is paginated/scoped differently.
-    for note in notes.search_notes(key, folder=DEFAULT_FOLDER):
+    for note in notes.find_notes_by_title(key, folder=DEFAULT_FOLDER):
         if note.title == key:
             return note
     return None

@@ -21,14 +21,16 @@ class Note:
     """An Apple Notes note.
 
     ``body_markdown`` is ``None`` for lightweight list/search results (title +
-    id only) and populated by :func:`apple_notes.notes.read_note`. Bodies are
-    always exchanged as Markdown at this layer; HTML never escapes the backend.
+    id only) and populated by :func:`apple_notes.notes.read_note`. The default
+    wire format is Markdown. ``body_html`` is the raw Notes HTML, populated
+    only when a caller asks for the HTML path (Forever Notes in-place edits).
     """
 
     id: str                        # stable AppleScript id (canonical handle)
     title: str                     # first line of the note
     folder: str | None = None      # folder display name
     body_markdown: str | None = None
+    body_html: str | None = None
     created: datetime | None = None
     modified: datetime | None = None
 

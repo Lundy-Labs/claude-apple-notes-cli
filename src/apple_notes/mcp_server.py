@@ -8,7 +8,7 @@ Transports:
                 guarded by a bearer token read from APPLE_NOTES_MCP_TOKEN.
 
 Tools (map to apple_notes.notes / memory / export):
-    notes_list_folders, notes_list, notes_search, notes_read,
+    notes_list_folders, notes_list, notes_find, notes_search, notes_read,
     notes_create, notes_append, memory_get, memory_set, export_note
 
 Usage (see [project.scripts] -> apple-notes-mcp):
@@ -51,7 +51,9 @@ mcp = FastMCP(
     instructions=(
         "Read and write Apple Notes in Markdown. By default tools are scoped to "
         "the 'Claude Memory' folder; pass an explicit folder to reach elsewhere. "
-        "Notes are addressed by their stable id, never by title."
+        "Use notes_find for exact title lookup (whose({name})); body search is "
+        "folder-scoped. Do not append to Forever Notes Planner dailies: assigning "
+        "note.body strips Home/Today/Back/Next note links."
     ),
 )
 
@@ -71,37 +73,60 @@ def notes_list_folders() -> list[dict]:
 
 
 @mcp.tool(name="notes_list")
-def notes_list(folder: str | None = None) -> list[dict]:
+def notes_list(folder: str | None = None, limit: int | None = None) -> list[dict]:
     """List notes (title + id only) in a folder.
 
     folder: folder name to list; omit to use the default 'Claude Memory' folder.
+    limit: optional max notes to return (use on huge folders like Notes).
     """
     return [
         {"id": n.id, "title": n.title, "folder": n.folder}
-        for n in core.list_notes(folder=folder)
+        for n in core.list_notes(folder=folder, limit=limit)
+    ]
+
+
+@mcp.tool(name="notes_find")
+def notes_find(title: str, folder: str | None = None) -> list[dict]:
+    """Fast exact-title lookup via whose({name}). Does not scan bodies.
+
+    title: exact note title, e.g. '02 September'.
+    folder: optional folder to restrict the lookup to.
+    """
+    return [
+        {"id": n.id, "title": n.title, "folder": n.folder}
+        for n in core.find_notes_by_title(title, folder=folder)
     ]
 
 
 @mcp.tool(name="notes_search")
-def notes_search(query: str, folder: str | None = None) -> list[dict]:
-    """Search note titles and bodies (case-insensitive).
+def notes_search(
+    query: str,
+    folder: str | None = None,
+    title_only: bool = False,
+) -> list[dict]:
+    """Search notes, title-first via whose({name}).
 
     query: text to search for.
     folder: optional folder to restrict the search to.
+    title_only: if true, match titles only (never plaintext the library).
+    Body search is folder-scoped (folder, or Claude Memory + Claude Exports).
     """
     return [
         {"id": n.id, "title": n.title, "folder": n.folder}
-        for n in core.search_notes(query, folder=folder)
+        for n in core.search_notes(query, folder=folder, title_only=title_only)
     ]
 
 
 @mcp.tool(name="notes_read")
-def notes_read(note_id: str) -> str:
-    """Read a note and return its body as Markdown.
+def notes_read(note_id: str, html: bool = False) -> str:
+    """Read a note. Default Markdown; html=True returns raw Notes HTML.
 
     note_id: stable AppleScript note id.
+    html: if true, skip Markdown conversion (Forever Notes / rich pages).
     """
-    note = core.read_note(note_id)
+    note = core.read_note(note_id, html=html)
+    if html:
+        return note.body_html or ""
     return note.body_markdown or ""
 
 
@@ -122,7 +147,11 @@ def notes_create(
 
 @mcp.tool(name="notes_append")
 def notes_append(note_id: str, body_markdown: str) -> dict:
-    """Append a Markdown body to an existing note.
+    """Append Markdown to an existing note by assigning note.body.
+
+    This re-serializes the note and strips Forever Notes Home/Today/Back/Next
+    note links. Planner DD Month dailies are refused. Test writes only on a
+    throwaway note.
 
     note_id: stable AppleScript note id.
     body_markdown: Markdown to append.
