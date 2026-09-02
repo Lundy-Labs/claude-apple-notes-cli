@@ -17,9 +17,9 @@ about you across sessions, and to **export** chats or research into notes.
   - a **Typer CLI** (`notes`) for the terminal, and
   - an **MCP server** (`apple-notes-mcp`) that exposes the same operations as
     tools to Claude.
-- **Markdown is the wire format.** Apple Notes stores HTML internally;
-  conversion happens at the boundary (`convert.py`). Bodies are always exchanged
-  as Markdown at the API/CLI/MCP layer.
+- **Markdown is the default wire format.** Apple Notes stores HTML internally;
+  conversion happens at the boundary (`convert.py`). Use `notes read --html` to
+  inspect raw HTML. Title lookup is `notes find --title` (JXA `whose({name})`).
 - Pinned by default to two folders so it won't roam your whole library:
   **`Claude Memory`** and **`Claude Exports`**. An explicit `--folder` overrides.
 
@@ -71,9 +71,12 @@ notes --help
 # Browse
 notes folders                      # list all Notes folders
 notes list                         # list notes in "Claude Memory" (default)
-notes list --folder "Notes"        # scope to another folder
-notes search "tailscale"           # search titles + bodies
+notes list --folder "Notes" --limit 50
+notes find --title "02 September"  # exact title via whose({name}); no body scan
+notes search "tailscale" --title-only
+notes search "tailscale" --folder "Claude Memory"
 notes read NOTE_ID                 # print a note's Markdown body
+notes read NOTE_ID --html          # raw Notes HTML
 
 # Write (body via --body or piped on stdin)
 notes write --title "Idea" --body "## Idea\n\nText here"
@@ -82,13 +85,26 @@ notes append NOTE_ID --body "More text"
 notes delete NOTE_ID
 ```
 
-Notes are addressed by their stable AppleScript **id** (shown in `list`/`search`
-output), never by title — titles are not unique.
+Notes are addressed by stable AppleScript **id** (shown in `list`/`search`/`find`
+output), or by exact title via `notes find --title`.
+
+## Large libraries
+
+Title and id lookups use JXA `whose()` / `byId`. They do **not** walk every
+folder calling `plaintext()` on every note.
+
+- `notes find --title "02 September"` — exact `whose({name})`.
+- `notes search QUERY --title-only` — title `whose({name: {_contains}})` only.
+- Body search is folder-scoped: pass `--folder`, or it scans only
+  `Claude Memory` and `Claude Exports`. It never `plaintext()`s the whole
+  library.
+- `notes list` bulk-reads `.id()` / `.name()` on the folder specifier. Use
+  `--limit` on huge folders such as **Notes**.
 
 ## MCP registration
 
 The MCP server exposes the core operations plus memory/export as tools:
-`notes_list_folders`, `notes_list`, `notes_search`, `notes_read`,
+`notes_list_folders`, `notes_list`, `notes_find`, `notes_search`, `notes_read`,
 `notes_create`, `notes_append`, `memory_core`, `memory_get`, `memory_set`,
 `export_note`.
 

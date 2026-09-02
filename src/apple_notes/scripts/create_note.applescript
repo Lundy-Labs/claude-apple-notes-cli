@@ -20,14 +20,7 @@ function run(argv) {
   const note = Notes.Note({ body: bodyHtml });
   folder.notes.push(note);
 
-  return JSON.stringify({
-    id: note.id(),
-    name: note.name(),
-    folder: folder.name(),
-    account: account.name(),
-    created: isoOrNull(note.creationDate()),
-    modified: isoOrNull(note.modificationDate()),
-  });
+  return JSON.stringify(noteToRecord(note));
 }
 
 function pickAccount(Notes, accountName) {
@@ -38,7 +31,6 @@ function pickAccount(Notes, accountName) {
     }
     throw new Error("account not found: " + accountName);
   }
-  // Default to the default account if exposed, else the first account.
   try {
     const def = Notes.defaultAccount();
     if (def) return def;
@@ -50,16 +42,16 @@ function pickAccount(Notes, accountName) {
 }
 
 function findOrCreateFolder(Notes, account, folderName) {
-  const folders = account.folders();
-  for (let f = 0; f < folders.length; f++) {
-    if (folders[f].name() === folderName) return folders[f];
+  try {
+    const found = asArray(account.folders.whose({name: folderName})());
+    if (found.length > 0) return found[0];
+  } catch (e) {
+    // fall through
   }
-  // Autocreate the folder in this account.
+  const nested = [];
+  collectFolders(account, folderName, nested);
+  if (nested.length) return nested[0];
   const folder = Notes.Folder({ name: folderName });
   account.folders.push(folder);
   return folder;
-}
-
-function isoOrNull(d) {
-  return d ? d.toISOString() : null;
 }

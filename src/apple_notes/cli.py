@@ -1,14 +1,15 @@
 """Typer CLI front-end. Thin wrapper over apple_notes.notes.
 
 AGENT OWNERSHIP: Agent C (cli.py + mcp_server.py).
-Commands map 1:1 to the core API. Read commands print Markdown to stdout;
-write commands accept Markdown via --body or stdin.
+Commands map 1:1 to the core API. Read commands print Markdown to stdout
+(or HTML with --html); write commands accept Markdown via --body or stdin.
 
 Target command surface:
     notes folders
-    notes list [--folder NAME]
-    notes search QUERY [--folder NAME]
-    notes read NOTE_ID
+    notes list [--folder NAME] [--limit N]
+    notes find --title T [--folder NAME]
+    notes search QUERY [--folder NAME] [--title-only]
+    notes read NOTE_ID [--html]
     notes write --title T [--folder NAME]   (body from --body or stdin)
     notes append NOTE_ID                     (body from --body or stdin)
     notes delete NOTE_ID
@@ -17,7 +18,6 @@ Target command surface:
 from __future__ import annotations
 
 import sys
-from typing import Optional
 
 import typer
 
@@ -50,9 +50,11 @@ def _run(action, what: str):
         )
     except BackendError as exc:
         _fail(f"{what} failed: {exc}")
+    except ValueError as exc:
+        _fail(str(exc))
 
 
-def _body_from_option_or_stdin(body: Optional[str]) -> str:
+def _body_from_option_or_stdin(body: str | None) -> str:
     """Resolve a Markdown body from --body, else read all of stdin.
 
     Supports `echo '# x' | notes write --title X`.
@@ -74,26 +76,67 @@ def folders() -> None:
 
 @app.command("list")
 def list_notes(
-    folder: Optional[str] = typer.Option(
+    folder: str | None = typer.Option(
         None, "--folder", "-f", help="Folder to list (default: Claude Memory)."
     ),
+    limit: int | None = typer.Option(
+        None,
+        "--limit",
+        "-n",
+        help="Max notes to return (keeps huge folders like Notes from hanging).",
+    ),
 ) -> None:
-    """List notes (title + id) in a folder."""
-    result = _run(lambda: core.list_notes(folder=folder), "listing notes")
+    """List notes (title + id) in a folder. Uses bulk id/name reads, not bodies."""
+    result = _run(
+        lambda: core.list_notes(folder=folder, limit=limit), "listing notes"
+    )
+    for note in result:
+        typer.echo(note.summary())
+
+
+@app.command("find")
+def find_notes(
+    title: str = typer.Option(
+        ...,
+        "--title",
+        "-t",
+        help="Exact note title (JXA whose({name}); e.g. '02 September').",
+    ),
+    folder: str | None = typer.Option(
+        None, "--folder", "-f", help="Restrict the lookup to this folder."
+    ),
+) -> None:
+    """Fast exact-title lookup. Does not scan note bodies."""
+    result = _run(
+        lambda: core.find_notes_by_title(title, folder=folder), "finding note"
+    )
+    if not result:
+        _fail(f"no note titled {title!r}")
     for note in result:
         typer.echo(note.summary())
 
 
 @app.command("search")
 def search(
-    query: str = typer.Argument(..., help="Text to search for (case-insensitive)."),
-    folder: Optional[str] = typer.Option(
+    query: str = typer.Argument(..., help="Text to search for."),
+    folder: str | None = typer.Option(
         None, "--folder", "-f", help="Restrict the search to this folder."
     ),
+    title_only: bool = typer.Option(
+        False,
+        "--title-only",
+        help="Match titles via whose({name}) only; never call plaintext().",
+    ),
 ) -> None:
-    """Search note titles and bodies."""
+    """Search notes, title-first.
+
+    Titles are matched with whose({name}) (fast, library-wide unless --folder).
+    Body search is folder-scoped: --folder, or the small default set
+    (Claude Memory + Claude Exports). It never plaintext()s the whole library.
+    """
     result = _run(
-        lambda: core.search_notes(query, folder=folder), "searching notes"
+        lambda: core.search_notes(query, folder=folder, title_only=title_only),
+        "searching notes",
     )
     for note in result:
         typer.echo(note.summary())
@@ -102,19 +145,27 @@ def search(
 @app.command("read")
 def read(
     note_id: str = typer.Argument(..., help="Stable AppleScript note id."),
+    html: bool = typer.Option(
+        False,
+        "--html",
+        help="Print raw Notes HTML instead of Markdown.",
+    ),
 ) -> None:
-    """Read a note and print its body as Markdown."""
-    note = _run(lambda: core.read_note(note_id), "reading note")
-    typer.echo(note.body_markdown or "")
+    """Read a note and print its body as Markdown (or HTML with --html)."""
+    note = _run(lambda: core.read_note(note_id, html=html), "reading note")
+    if html:
+        typer.echo(note.body_html or "")
+    else:
+        typer.echo(note.body_markdown or "")
 
 
 @app.command("write")
 def write(
     title: str = typer.Option(..., "--title", "-t", help="Note title (first line)."),
-    folder: Optional[str] = typer.Option(
+    folder: str | None = typer.Option(
         None, "--folder", "-f", help="Folder to create the note in (default: Claude Memory)."
     ),
-    body: Optional[str] = typer.Option(
+    body: str | None = typer.Option(
         None, "--body", "-b", help="Markdown body (omit to read from stdin)."
     ),
 ) -> None:
@@ -130,7 +181,7 @@ def write(
 @app.command("append")
 def append(
     note_id: str = typer.Argument(..., help="Stable AppleScript note id."),
-    body: Optional[str] = typer.Option(
+    body: str | None = typer.Option(
         None, "--body", "-b", help="Markdown to append (omit to read from stdin)."
     ),
 ) -> None:
@@ -200,7 +251,7 @@ def memory_get(
 @memory_app.command("set")
 def memory_set(
     key: str = typer.Argument(..., help="Memory note name, e.g. Profile."),
-    body: Optional[str] = typer.Option(
+    body: str | None = typer.Option(
         None, "--body", "-b", help="Markdown content (omit to read from stdin)."
     ),
     append: bool = typer.Option(

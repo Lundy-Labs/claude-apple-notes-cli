@@ -51,19 +51,24 @@ local SQLite DB, on macOS**. Consequences:
 
 ```
 list_folders() -> [Folder]
-list_notes(folder=None) -> [Note]            # title+id only
-search_notes(query, folder=None) -> [Note]
-read_note(note_id) -> Note                    # body as Markdown
+list_notes(folder=None, *, limit=None) -> [Note]   # title+id; bulk specifier read
+find_notes_by_title(title, folder=None) -> [Note]  # whose({name}); no body scan
+search_notes(query, folder=None, *, title_only=False) -> [Note]
+read_note(note_id, *, html=False) -> Note          # Markdown, or raw HTML
 create_note(title, body_markdown, folder=DEFAULT_FOLDER) -> Note
 append_note(note_id, body_markdown) -> Note
 delete_note(note_id) -> None
 ```
 
+Lookups use JXA `whose()` / `byId`. Body search never `plaintext()`s the whole
+library (requires `--folder`, or defaults to Claude Memory + Claude Exports).
+
 ## Safety defaults
 
 - Tool is pinned to `Claude Memory` / `Claude Exports` folders unless an explicit
   `--folder` is given — it won't roam the whole personal library by accident.
-- Notes addressed by stable AppleScript `id`, never by (non-unique) title.
+- Notes addressed by stable AppleScript `id`, or by exact title via
+  `find_notes_by_title` (`whose({name})`).
 
 ## Memory model
 
