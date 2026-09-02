@@ -23,7 +23,7 @@ class Note:
     ``body_markdown`` is ``None`` for lightweight list/search results (title +
     id only) and populated by :func:`apple_notes.notes.read_note`. The default
     wire format is Markdown. ``body_html`` is the raw Notes HTML, populated
-    only when a caller asks for the HTML path (Forever Notes in-place edits).
+    only when a caller asks for it (``notes read --html``).
     """
 
     id: str                        # stable AppleScript id (canonical handle)

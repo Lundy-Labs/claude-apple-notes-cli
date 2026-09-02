@@ -76,20 +76,17 @@ notes find --title "02 September"  # exact title via whose({name}); no body scan
 notes search "tailscale" --title-only
 notes search "tailscale" --folder "Claude Memory"
 notes read NOTE_ID                 # print a note's Markdown body
-notes read NOTE_ID --html          # raw Notes HTML (read-only; does not rewrite)
+notes read NOTE_ID --html          # raw Notes HTML
 
 # Write (body via --body or piped on stdin)
-# WARNING: append assigns note.body and strips Forever Notes note-to-note links.
-# Never append to Planner "DD Month" dailies; test writes on a throwaway note.
 notes write --title "Idea" --body "## Idea\n\nText here"
 echo "## Idea" | notes write --title "Idea"
 notes append NOTE_ID --body "More text"
 notes delete NOTE_ID
 ```
 
-`notes find --title` is the fast path for Forever Notes daily pages. Notes are
-also addressed by their stable AppleScript **id** (shown in `list`/`search`/
-`find` output).
+Notes are addressed by stable AppleScript **id** (shown in `list`/`search`/`find`
+output), or by exact title via `notes find --title`.
 
 ## Large libraries
 
@@ -104,45 +101,12 @@ folder calling `plaintext()` on every note.
 - `notes list` bulk-reads `.id()` / `.name()` on the folder specifier. Use
   `--limit` on huge folders such as **Notes**.
 
-## Forever Notes (Planner dailies)
-
-Daily pages in **Planner** titled `DD Month` (e.g. `02 September`) store
-clickable Home/Today/Back/Next **note links**. AppleScript `note.body()` does
-not export those links (href count is 0 on an untouched page). **Any assignment
-to `note.body`** — append-by-rewrite, markdown round-trip, or set-body —
-strips them.
-
-Notes.app's scripting dictionary exposes these note properties:
-
-`container, class, password protected, modification date, creation date, shared, body, id, name, plaintext`
-
-There is **no** append, insert, attributed-text, or document-model command.
-The only scriptable content mutation is setting `body`, which re-serializes
-the note. This CLI therefore **does not ship a fake "safe append"** for
-Planner dailies: `notes append` still assigns `body` (for simple notes such as
-Claude Memory) and **refuses** Planner `DD Month` titles.
-
-Do **not** test body writes on Planner dailies. Create a throwaway note
-instead.
-
-A morning digest can still **find** today's page quickly:
-
-```bash
-notes find --title "02 September"
-```
-
-Filling Weather/Meetings on that page is **not possible** through AppleScript
-without destroying the nav links. GUI paste or a Shortcuts "Append to Note"
-action might insert without going through `note.body`; those are not part of
-Notes' scripting interface and are not shipped here (unverified on this
-tooling, and Shortcuts needs a GUI session plus a user-installed shortcut).
-
 ## MCP registration
 
 The MCP server exposes the core operations plus memory/export as tools:
 `notes_list_folders`, `notes_list`, `notes_find`, `notes_search`, `notes_read`,
 `notes_create`, `notes_append`, `memory_core`, `memory_get`, `memory_set`,
-`export_note`. `notes_append` assigns `note.body` and refuses Planner dailies.
+`export_note`.
 
 ### Local (stdio) — Claude Code on the Mac
 

@@ -4,8 +4,7 @@
 //   folderName - optional; if non-empty, restrict to that folder.
 // Output: JSON array of {id, name, folder, account, created, modified}.
 //
-// This is the fast title path (~7s for "02 September" on a large library).
-// Do NOT fall back to walking folders or calling plaintext().
+// Fast exact-title path via whose({name}). Do not walk folders or plaintext().
 function run(argv) {
   const title = argv[0] || "";
   const folderName = argv.length > 1 ? argv[1] : "";

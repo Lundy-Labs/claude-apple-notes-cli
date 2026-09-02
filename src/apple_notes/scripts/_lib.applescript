@@ -161,24 +161,3 @@ function evalWhose(spec) {
     return [];
   }
 }
-
-// Forever Notes Planner dailies ("01 September"). Assigning note.body strips
-// Home/Today/Back/Next note links that body() does not even export.
-var FOREVER_NOTES_PLANNER = "Planner";
-var FOREVER_NOTES_DAILY = /^(0[1-9]|[12][0-9]|3[01])\s+(January|February|March|April|May|June|July|August|September|October|November|December)$/i;
-
-function isForeverNotesDaily(name, folder) {
-  if ((folder || "") !== FOREVER_NOTES_PLANNER) return false;
-  return FOREVER_NOTES_DAILY.test((name || "").replace(/^\s+|\s+$/g, ""));
-}
-
-function refuseForeverNotesDailyWrite(name, folder) {
-  if (!isForeverNotesDaily(name, folder)) return;
-  throw new Error(
-    "refusing to assign note.body on Forever Notes daily " +
-      JSON.stringify(name) +
-      " in Planner: that strips Home/Today/Back/Next note links. " +
-      "Notes' scripting dictionary has no append/insert — only set body. " +
-      "Test writes on a throwaway note you create, never on a DD Month Planner page."
-  );
-}

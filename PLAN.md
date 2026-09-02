@@ -56,16 +56,12 @@ find_notes_by_title(title, folder=None) -> [Note]  # whose({name}); no body scan
 search_notes(query, folder=None, *, title_only=False) -> [Note]
 read_note(note_id, *, html=False) -> Note          # Markdown, or raw HTML
 create_note(title, body_markdown, folder=DEFAULT_FOLDER) -> Note
-append_note(note_id, body_markdown) -> Note        # assigns note.body; refuses Planner dailies
+append_note(note_id, body_markdown) -> Note
 delete_note(note_id) -> None
 ```
 
 Lookups use JXA `whose()` / `byId`. Body search never `plaintext()`s the whole
 library (requires `--folder`, or defaults to Claude Memory + Claude Exports).
-
-**Forever Notes:** there is no non-rewriting append in Notes' scripting
-dictionary. `append_note` assigns `body` and will not touch Planner `DD Month`
-pages.
 
 ## Safety defaults
 
@@ -73,7 +69,6 @@ pages.
   `--folder` is given — it won't roam the whole personal library by accident.
 - Notes addressed by stable AppleScript `id`, or by exact title via
   `find_notes_by_title` (`whose({name})`).
-- Never assign `note.body` on Forever Notes Planner dailies.
 
 ## Memory model
 

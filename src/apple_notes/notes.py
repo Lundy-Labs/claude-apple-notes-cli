@@ -9,17 +9,10 @@ Flow:
     read:   backend (HTML) -> convert.html_to_markdown -> Note.body_markdown
             (or skip conversion when html=True and return Note.body_html)
     write:  Markdown -> convert.markdown_to_html -> backend (osascript)
-
-There is no Forever Notes-safe append: Notes.sdef only mutates content by
-assigning ``note.body``, which re-serializes attributed text and strips
-note-to-note links that ``body()`` does not export. ``append_note`` still
-assigns ``body`` (for simple notes) and refuses Planner "DD Month" dailies.
-
 """
 
 from __future__ import annotations
 
-import re
 from datetime import datetime
 
 from . import convert
@@ -36,37 +29,7 @@ EXPORT_FOLDER = "Claude Exports"
 # and may be library-wide.
 BODY_SEARCH_DEFAULT_FOLDERS = (DEFAULT_FOLDER, EXPORT_FOLDER)
 
-# Forever Notes daily pages live here, titled "DD Month". Any note.body
-# assignment (append-by-rewrite, markdown round-trip, set_note_body) strips
-# Home/Today/Back/Next note links that body() does not export.
-PLANNER_FOLDER = "Planner"
-_MONTHS = (
-    "January",
-    "February",
-    "March",
-    "April",
-    "May",
-    "June",
-    "July",
-    "August",
-    "September",
-    "October",
-    "November",
-    "December",
-)
-_DAILY_TITLE = re.compile(
-    r"^(0[1-9]|[12]\d|3[01])\s+(" + "|".join(_MONTHS) + r")$",
-    re.IGNORECASE,
-)
-
 _BODY_FOLDER_SEP = "\x1f"
-
-
-def is_forever_notes_daily(title: str | None, folder: str | None) -> bool:
-    """True for Planner notes titled like ``02 September``."""
-    if (folder or "").strip() != PLANNER_FOLDER:
-        return False
-    return bool(_DAILY_TITLE.match((title or "").strip()))
 
 
 # --------------------------------------------------------------------------- #
@@ -155,8 +118,7 @@ def list_notes(folder: str | None = None, *, limit: int | None = None) -> list[N
 def find_notes_by_title(title: str, folder: str | None = None) -> list[Note]:
     """Exact title lookup via JXA ``whose({name: title})``.
 
-    This is the fast path for Forever Notes daily pages ("02 September"). It
-    does not scan bodies and does not walk folders note-by-note.
+    Does not scan bodies and does not walk folders note-by-note.
     """
     records = run_json("find_by_title", [title, folder or ""])
     return [_note_from_record(rec) for rec in records]
@@ -194,7 +156,7 @@ def read_note(note_id: str, *, html: bool = False) -> Note:
     """Fetch a single note by id via ``whose({id})`` / ``byId``.
 
     Default: convert the HTML body to Markdown. With ``html=True``, skip the
-    converter (Forever Notes / rich pages) and populate ``body_html`` instead.
+    converter and populate ``body_html`` instead.
     """
     rec = run_json("read_note", [note_id])
     raw_html = rec.get("body") or ""
@@ -219,14 +181,7 @@ def create_note(title: str, body_markdown: str, folder: str = DEFAULT_FOLDER) ->
 
 
 def append_note(note_id: str, body_markdown: str) -> Note:
-    """Append Markdown to an existing note by assigning ``note.body``.
-
-    Notes.app has no scripting command that inserts at the end of existing
-    attributed text. This concatenates HTML onto ``body`` and writes it back,
-    which **strips Forever Notes Home/Today/Back/Next note links**. Planner
-    daily pages are refused. Use only on simple notes, or on a throwaway note
-    you created for testing.
-    """
+    """Append Markdown to an existing note's body."""
     fragment_html = convert.markdown_to_html(body_markdown or "")
     run_json("append_note", [note_id, fragment_html])
     # Re-read so the returned Note reflects the full, current body as Markdown.

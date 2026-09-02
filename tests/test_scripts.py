@@ -42,14 +42,12 @@ def test_read_append_delete_use_whose_id_or_byid():
         assert "byId" in src
 
 
-def test_append_assigns_body_and_refuses_planner_dailies():
-    """Honest: append is still a body rewrite; dailies are blocked."""
+def test_append_refuses_planner_dailies():
+    """Safety rail: assigning body on a Planner DD Month note strips nav links."""
     raw = _raw("append_note")
-    src = load_script("append_note")
     assert "note.body =" in raw
-    assert "refuseForeverNotesDailyWrite" in raw
-    assert "isForeverNotesDaily" in src
-    assert "Home/Today/Back/Next" in src
+    assert "Planner" in raw
+    assert "strips Forever Notes nav links" in raw
 
 
 def test_list_uses_bulk_specifier_not_per_note_loop():

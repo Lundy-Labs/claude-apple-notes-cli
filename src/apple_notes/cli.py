@@ -148,7 +148,7 @@ def read(
     html: bool = typer.Option(
         False,
         "--html",
-        help="Print raw Notes HTML instead of Markdown (keeps Forever Notes structure).",
+        help="Print raw Notes HTML instead of Markdown.",
     ),
 ) -> None:
     """Read a note and print its body as Markdown (or HTML with --html)."""
@@ -185,13 +185,7 @@ def append(
         None, "--body", "-b", help="Markdown to append (omit to read from stdin)."
     ),
 ) -> None:
-    """Append Markdown to an existing note (--body or stdin).
-
-    Implemented as assigning note.body (the only content-mutation Notes
-    exposes). That strips Forever Notes Home/Today/Back/Next note links.
-    Planner "DD Month" dailies are refused. Test writes only on a throwaway
-    note you create, never on a Planner daily page.
-    """
+    """Append Markdown to an existing note (--body or stdin)."""
     body_markdown = _body_from_option_or_stdin(body)
     note = _run(
         lambda: core.append_note(note_id, body_markdown), "appending to note"
